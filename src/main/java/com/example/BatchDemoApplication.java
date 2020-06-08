@@ -3,9 +3,6 @@ package com.example;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.UUID;
 
 import javax.sql.DataSource;
 
@@ -15,17 +12,18 @@ import org.springframework.batch.core.configuration.annotation.EnableBatchProces
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
-import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
-import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
+import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.jdbc.core.RowMapper;
+import org.springframework.core.io.Resource;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestStreamHandler;
@@ -67,21 +65,33 @@ public class BatchDemoApplication implements RequestStreamHandler {
         private String password;
     }
 
-    /*
-     * @Bean FlatFileItemReader<Patient> itemReader(@Value("classpath:./patient.csv") Resource in) {
-     * 
-     * return new FlatFileItemReaderBuilder<Patient>().resource(in).name("file-reader").targetType(Patient.class).delimited() .delimiter(",").names("name",
-     * "age", "email").build(); }
-     */
+    
+      @Bean FlatFileItemReader<Patient> itemReader(@Value("classpath:./patient.csv") Resource in) {
+      
+      return new FlatFileItemReaderBuilder<Patient>().resource(in).name("file-reader").targetType(Patient.class).delimited() .delimiter(",").names("name",
+      "age", "email").build(); }
+     
 
-    /*
-     * @Bean JdbcBatchItemWriter<Patient> itemWriter(DataSource dataSource) {
-     * 
-     * return new JdbcBatchItemWriterBuilder<Patient>() .dataSource(dataSource) .sql("insert into PATIENT( name, age, email) values (:name, :age, :email)"
-     * ).beanMapped() .build(); }
-     */
+    
+     @Bean JdbcBatchItemWriter<Patient> itemWriter(DataSource dataSource) {
+     
+     return new JdbcBatchItemWriterBuilder<Patient>() .dataSource(dataSource) .sql("insert into PATIENT( name, age, email) values (:name, :age, :email)"
+     ).beanMapped() .build(); }
+    
 
     @Bean
+    Job job(JobBuilderFactory jbf, StepBuilderFactory sbf, ItemReader<? extends Patient> ir, ItemWriter<? super Patient> iw) {
+
+        Step step1 = sbf.get("File-To-Patient")
+                .<Patient, Patient> chunk(4)
+                .reader(ir)
+                .writer(iw).build();
+
+        return jbf.get("etl").incrementer(new RunIdIncrementer())
+                .start(step1).build();
+    }
+    
+    /*@Bean
     ItemReader<Patient> jdbcReader(DataSource dataSource) {
 
         return new JdbcCursorItemReaderBuilder<Patient>().dataSource(dataSource).name("jdbc-reader")
@@ -123,7 +133,7 @@ public class BatchDemoApplication implements RequestStreamHandler {
 
         return jbf.get("etl").incrementer(new RunIdIncrementer())
                 .start(step1).build();
-    }
+    }*/
 
     @Override
     public void handleRequest(InputStream arg0, OutputStream arg1, Context context) throws IOException {
